@@ -6,7 +6,17 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset, Sampler
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift
 
+
+def build_transforms():
+    augment = Compose([
+        AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
+        TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
+        PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
+        Shift(p=0.5),
+    ])
+    return augment
 
 class QuestionDataset(Dataset):
     def __init__(
@@ -16,7 +26,7 @@ class QuestionDataset(Dataset):
         self.fold = fold
         self.image_paths, self.labels = self.get_data(data_path)
 
-        self.transform = transform
+        self.transform = build_transforms()
         self.size = size
 
     def get_data(self, data_path):
@@ -83,39 +93,6 @@ def collate_fn(batch):
     images = torch.stack(images)
     labels = torch.stack(labels)
     return {"images": images, "labels": labels}
-
-
-class RatioSampler(Sampler):
-    def __init__(self, dataset, ratio, num_replicas=None, rank=None):
-        if not dist.is_initialized():
-            dist.init_process_group(backend="nccl")
-
-        self.dataset = dataset
-        self.ratio = ratio
-        self.num_replicas = (
-            num_replicas if num_replicas is not None else dist.get_world_size()
-        )
-        self.rank = rank if rank is not None else dist.get_rank()
-        self.indices = list(range(len(dataset)))
-        self.positive_indices = np.where(np.array(dataset.labels) == 1)[0].tolist()
-        self.negative_indices = np.where(np.array(dataset.labels) == 0)[0].tolist()
-        self.sampled_indices = self._resample_indices()
-
-    def _resample_indices(self):
-        np.random.shuffle(self.negative_indices)
-        num_positives = len(self.positive_indices)
-        num_negatives = min(int(self.ratio * num_positives), len(self.negative_indices))
-        sampled_indices = self.positive_indices + self.negative_indices[:num_negatives]
-        np.random.shuffle(sampled_indices)
-        return sampled_indices
-
-    def __iter__(self):
-        # Split indices for distributed training
-        indices = self.sampled_indices[self.rank :: self.num_replicas]
-        return iter(indices)
-
-    def __len__(self):
-        return len(self.sampled_indices) // self.num_replicas
 
 
 if __name__ == "__main__":
