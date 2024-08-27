@@ -97,9 +97,16 @@ class ModelArguments:
     """
     Arguments relating to model.
     """
-    model_name: str = field(default="resnet50", metadata={"help": "timm model name"})
-    resume: Optional[str] = field(
-        default=None, metadata={"help": "Path of model checkpoint"}
+    model_name_or_path: str = field(
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
+    )
+    config_name: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
 
 
@@ -128,16 +135,4 @@ class DataArguments:
     max_samples: int = field(
         default=-1,
         metadata={"help": "The maximum number of samples to use for training."},
-    )
-    prompt_aug_prob: float = field(
-        default=0.0,
-        metadata={
-            "help": "The probability of using an augmenting version for the prompt."
-        },
-    )
-    response_aug_prob: float = field(
-        default=0.0,
-        metadata={
-            "help": "The probability of using an augmenting version for the response."
-        },
     )

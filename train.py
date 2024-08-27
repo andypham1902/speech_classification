@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import logging
 import os
 import sys
@@ -9,7 +11,8 @@ import torch.distributed as dist
 import transformers
 from transformers import TrainingArguments, set_seed, Trainer
 from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.trainer import logger
 from sklearn.metrics import accuracy_score, f1_score
 from dataset import QuestionDataset, collate_fn
 from model import Model
@@ -18,6 +21,7 @@ from configs import (
     DataArguments,
     ModelArguments,
 )
+
 
 @contextmanager
 def distributed_barrier(rank, is_initialized):
@@ -30,22 +34,6 @@ def distributed_barrier(rank, is_initialized):
         if rank == 0 and is_initialized:
             logger.info("Loading results from the main process ...")
             dist.barrier()
-
-
-def freeze_parameters(model, regex_patterns):
-    import re
-
-    # Escape periods and compile the regex patterns
-    compiled_patterns = [re.compile(pattern) for pattern in regex_patterns]
-
-    # Unfreeze layers that match the regex patterns
-    for name, param in model.named_parameters():
-        if any(pattern.match(name) for pattern in compiled_patterns):
-            # print(f"Freezing parameter: {name}")
-            param.requires_grad = False
-
-torch.set_float32_matmul_precision("high")
-logger = logging.getLogger(__name__)
 
 def compute_metrics(eval_preds):
     # calculate accuracy using sklearn's function
@@ -75,39 +63,34 @@ def main():
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
 
+    df = pd.read_csv(data_args.train_data_file)
     # Load datasets
     train_dataset = QuestionDataset(
-        data_path=data_args.train_data_path,
-        split="train",
-        fold=data_args.fold,
-        size=(data_args.image_size, data_args.image_size),
+        df[df.fold != data_args.fold],
+        mode="train",
     )
     if data_args.max_samples > 0:
         train_dataset = train_dataset.select(
             range(data_args.max_samples)
         )
 
-    val_dataset = QuestionDataset(
-        data_path=data_args.val_data_path,
-        split="val",
-        fold=data_args.fold,
-        size=(data_args.image_size, data_args.image_size),
+    valid_dataset = QuestionDataset(
+        df[df.fold == data_args.fold],
+        mode="val",
     )
     # Initialize trainer
     print("Initializing model...")
     model = Model(
-        model_name=model_args.model_name,
+        model_name=model_args.model_name_or_path,
         n_classes=2,
     )
-    if model_args.frozen_parameters:
-        freeze_parameters(model, model_args.frozen_parameters)
 
     print("Start training...")
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=val_dataset,
+        eval_dataset=valid_dataset,
         data_collator=collate_fn,
         compute_metrics=compute_metrics,
     )

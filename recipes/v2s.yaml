@@ -10,7 +10,7 @@ gradient_checkpointing_kwargs:
 
 # Training arguments
 ddp_find_unused_parameters: true
-train_data_file: /data/lipsync/rsna/train_series.csv
+train_data_file: data/train_question.csv
 fold: 0
 fp16: true
 learning_rate: 0.001
@@ -28,9 +28,9 @@ save_strategy: epoch
 # eval_steps: 1
 # save_steps: 1
 save_total_limit: 10
-metric_for_best_model: eval_loss
+metric_for_best_model: f1
 greater_is_better: true
-output_dir: v2s-20-classes
+output_dir: v2s-test
 dataloader_num_workers: 8
 logging_steps: 10
 warmup_ratio: 0.05
