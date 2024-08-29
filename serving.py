@@ -48,9 +48,18 @@ def predict(audiobytes: UploadFile = File(...), text: str = Form(...)):
         predicted_class = torch.argmax(probabilities, dim=1).item()
     
     # Augment the text based on the prediction
-    augmented_text = f"{'Question' if predicted_class == 1 else 'Statement'}: {text}"
+    if predicted_class == 1:  # Question
+        augmented_text = text + '？'
+    else:  # Statement
+        augmented_text = text + '。'
     
-    return augmented_text
+    # Return JSON response with augmented text
+    return JSONResponse(
+        content={
+            "augmented_text": augmented_text,
+        },
+        status_code=200
+    )
 
 if __name__ == "__main__":
     import uvicorn
