@@ -14,7 +14,7 @@ from transformers.integrations.deepspeed import is_deepspeed_zero3_enabled
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.trainer import logger
 from sklearn.metrics import accuracy_score, f1_score
-from dataset import QuestionDataset, collate_fn
+from dataset import QuestionDataset, collate_fn, EmotionDataset
 from model import Model
 from configs import (
     H4ArgumentParser,
@@ -65,7 +65,20 @@ def main():
 
     df = pd.read_csv(data_args.train_data_file)
     # Load datasets
-    train_dataset = QuestionDataset(
+    # train_dataset = QuestionDataset(
+    #     df[df.fold != data_args.fold],
+    #     mode="train",
+    # )
+    # if data_args.max_samples > 0:
+    #     train_dataset = train_dataset.select(
+    #         range(data_args.max_samples)
+    #     )
+
+    # valid_dataset = QuestionDataset(
+    #     df[df.fold == data_args.fold],
+    #     mode="val",
+    # )
+    train_dataset = EmotionDataset(
         df[df.fold != data_args.fold],
         mode="train",
     )
@@ -74,7 +87,7 @@ def main():
             range(data_args.max_samples)
         )
 
-    valid_dataset = QuestionDataset(
+    valid_dataset = EmotionDataset(
         df[df.fold == data_args.fold],
         mode="val",
     )
@@ -82,7 +95,7 @@ def main():
     print("Initializing model...")
     model = Model(
         model_name=model_args.model_name_or_path,
-        n_classes=2,
+        n_classes=8,
     )
 
     print("Start training...")

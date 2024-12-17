@@ -45,6 +45,32 @@ class QuestionDataset(Dataset):
         mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr//2, n_mels=self.n_mels) # (256, 94)
         mels = np.expand_dims(mels, axis=0)
         return torch.tensor(mels).float(), torch.tensor(label)
+    
+class EmotionDataset(Dataset):
+    def __init__(self, df, mode="train", n_mels=128, sr=48000, length=4):
+        self.mode = mode
+        self.paths = df["Path"].tolist()
+        self.labels = df.label.tolist()
+        self.transform = build_transforms()
+        self.n_mels = n_mels
+        self.sr = sr
+        self.length = length
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        audio_path = self.paths[idx]
+        label = self.labels[idx]
+        data, _ = librosa.load(audio_path, sr=self.sr)
+        if len(data) < self.length * self.sr:
+            data = np.pad(data, (self.length * self.sr - len(data), 0))
+        data = data[-(self.length * self.sr):]
+        if self.mode == "train":
+            data = self.transform(data, self.sr)
+        mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=512, n_fft=2048) # (256, 94)
+        mels = np.expand_dims(mels, axis=0)
+        return torch.tensor(mels).float(), torch.tensor(label)
 
 
 def collate_fn(batch):

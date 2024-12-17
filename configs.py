@@ -108,6 +108,12 @@ class ModelArguments:
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
+    resume_from_checkpoint: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
+    )
 
 
 
