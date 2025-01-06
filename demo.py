@@ -115,6 +115,7 @@ def create_interface():
         with gr.Row():
             with gr.Column():
                 audio_input = gr.Audio(sources="microphone", type="filepath")
+                file_input = gr.File(label="Upload Audio File", type="filepath")  # New upload feature
                 random_btn = gr.Button("Use Random Sample")
             
             with gr.Column():
@@ -125,6 +126,12 @@ def create_interface():
         audio_input.change(
             fn=lambda x: predict(x, False),
             inputs=[audio_input],
+            outputs=[output, audio_output, spectrogram_output]
+        )
+        
+        file_input.change(
+            fn=lambda x: predict(x.name, False) if x else (None, None, None),
+            inputs=[file_input],
             outputs=[output, audio_output, spectrogram_output]
         )
         
