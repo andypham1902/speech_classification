@@ -7,16 +7,26 @@ import pandas as pd
 import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset, Sampler
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, AddColorNoise, LoudnessNormalization, Normalize, RoomSimulator, Aliasing, BitCrush, BandPassFilter
 
 
-def build_transforms():
-    augment = Compose([
-        AddGaussianNoise(min_amplitude=0.001, max_amplitude=0.015, p=0.5),
-        TimeStretch(min_rate=0.8, max_rate=1.25, p=0.5),
-        PitchShift(min_semitones=-4, max_semitones=4, p=0.5),
-        Shift(p=0.5),
-    ])
+def build_transforms(mode="train"):
+    if mode == "train":
+        augment = Compose([
+            TimeStretch(min_rate=0.95, max_rate=1.05, p=0.3),  # Reduced range and probability
+            PitchShift(min_semitones=-1, max_semitones=1, p=0.3),  # Reduced range
+            Shift(p=0.5, shift_unit="seconds", min_shift=-0.3, max_shift=0.3, rollover=True),  # Reduced probability and range
+            AddColorNoise(p=0.5),  # Reduced probability
+            AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.2),  # Reduced max amplitude
+            BandPassFilter(min_center_freq=100.0, max_center_freq=8000.0, p=0.3),
+            # Normalize(p=1.0),  # Always normalize
+        ])
+    else:
+        augment = Compose([
+            Normalize(p=1.0),
+            AddColorNoise(p=0.3),  # Light noise for robustness
+            BandPassFilter(min_center_freq=100.0, max_center_freq=8000.0, p=0.3),
+        ])
     return augment
 
 class QuestionDataset(Dataset):
@@ -24,7 +34,7 @@ class QuestionDataset(Dataset):
         self.mode = mode
         self.paths = df.audio.tolist()
         self.labels = df.label.tolist()
-        self.transform = build_transforms()
+        self.transform = build_transforms(mode)
         self.n_mels = n_mels
         self.root = root
         self.sr = sr
@@ -37,12 +47,34 @@ class QuestionDataset(Dataset):
         label = self.labels[idx]
         audio_path = audio_path.replace("Question-Statement", "Question-Statement_clean")
         data, _ = librosa.load(os.path.join(self.root, audio_path), sr=self.sr)
+        
+        # Normalize audio before padding
+        data = data / (np.max(np.abs(data)) + 1e-6)
+        
         if len(data) < self.sr:
             data = np.pad(data, (self.sr - len(data), 0))
         data = data[-self.sr:]
-        if self.mode == "train":
+        
+        if self.mode == "train" or self.mode == "val":
             data = self.transform(data, self.sr)
-        mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr//2, n_mels=self.n_mels) # (256, 94)
+            
+        # Updated mel spectrogram parameters
+        mels = librosa.feature.melspectrogram(
+            y=data, 
+            sr=self.sr, 
+            fmax=self.sr//2,
+            n_mels=self.n_mels,
+            hop_length=512,  # Adjusted hop length
+            n_fft=2048,      # Adjusted window size
+            power=2.0        # Square of magnitude
+        )
+        
+        # Log-scale mel spectrograms
+        mels = librosa.power_to_db(mels, ref=np.max)
+        
+        # Normalize mel spectrograms
+        mels = (mels - mels.mean()) / (mels.std() + 1e-8)
+        
         mels = np.expand_dims(mels, axis=0)
         return torch.tensor(mels).float(), torch.tensor(label)
     
@@ -51,7 +83,7 @@ class EmotionDataset(Dataset):
         self.mode = mode
         self.paths = df["Path"].tolist()
         self.labels = df.label.tolist()
-        self.transform = build_transforms()
+        self.transform = build_transforms(mode)
         self.n_mels = n_mels
         self.sr = sr
         self.length = length
@@ -63,12 +95,18 @@ class EmotionDataset(Dataset):
         audio_path = self.paths[idx]
         label = self.labels[idx]
         data, _ = librosa.load(audio_path, sr=self.sr)
+        # Normalize audio
+        data = data / (np.max(np.abs(data)) + 1e-6)
         if len(data) < self.length * self.sr:
             data = np.pad(data, (self.length * self.sr - len(data), 0))
         data = data[-(self.length * self.sr):]
         if self.mode == "train":
             data = self.transform(data, self.sr)
+            if len(data) < self.length * self.sr:
+                data = np.pad(data, (self.length * self.sr - len(data), 0))
+            data = data[-(self.length * self.sr):]
         mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=512, n_fft=2048) # (256, 94)
+        # mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=256, n_fft=1024)
         mels = np.expand_dims(mels, axis=0)
         return torch.tensor(mels).float(), torch.tensor(label)
 

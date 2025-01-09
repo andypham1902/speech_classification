@@ -9,9 +9,11 @@ from dataset import EmotionDataset, collate_fn
 from model import Model
 import safetensors.torch
 import librosa
+import librosa.display
+from scipy.signal import butter, filtfilt
 
 # Constants
-CHECKPOINT_PATH = "v2s_emo/model.safetensors"
+CHECKPOINT_PATH = "v2s_emo_augment_with_noise_2/checkpoint-1548/model.safetensors"
 TEST_DATA_PATH = "emotions.csv"
 EMOTION_LABELS = {
     0: 'Angry',
@@ -47,27 +49,82 @@ def load_test_dataset():
 model = load_model()
 test_dataset = load_test_dataset()
 
+def butter_bandpass(lowcut, highcut, fs, order=5):
+    """Create a butterworth bandpass filter"""
+    nyquist = 0.5 * fs
+    low = lowcut / nyquist
+    high = highcut / nyquist
+    b, a = butter(order, [low, high], btype='band')
+    return b, a
+
+def apply_bandpass_filter(data, fs, lowcut=300, highcut=3400, order=5):
+    """Apply bandpass filter to focus on voice frequencies"""
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    return filtfilt(b, a, data)
+
+def spectral_gating(data, sr, n_std_thresh=1.5):
+    """Reduce noise using spectral gating"""
+    # Compute spectrogram
+    spec = librosa.stft(data)
+    mag = np.abs(spec)
+    phase = np.angle(spec)
+    
+    # Estimate noise profile
+    mean = np.mean(mag, axis=1, keepdims=True)
+    std = np.std(mag, axis=1, keepdims=True)
+    thresh = mean + n_std_thresh * std
+    
+    # Apply soft thresholding
+    mask = (mag > thresh).astype(float)
+    smoothed_mask = librosa.decompose.nn_filter(mask, aggregate=np.median, metric='cosine')
+    mag = mag * smoothed_mask
+    
+    # Reconstruct signal
+    filtered_spec = mag * np.exp(1j * phase)
+    return librosa.istft(filtered_spec)
+
+def enhance_audio(data, sr):
+    """Apply voice enhancement pipeline"""
+    # Apply bandpass filter for voice frequency range
+    filtered_data = apply_bandpass_filter(data, sr)
+    
+    # Apply spectral gating for noise reduction
+    enhanced_data = spectral_gating(filtered_data, sr)
+    
+    # Normalize audio
+    enhanced_data = librosa.util.normalize(enhanced_data)
+    
+    return enhanced_data
+
 def process_audio(audio_path):
     sr = 48000
     length = 4
-    n_mels=128
-    data, _ = librosa.load(audio_path, sr=sr)
+    n_mels = 128
+    data, sr = librosa.load(audio_path, sr=sr)
+    
+    # Apply voice enhancement
+    # data = enhance_audio(data, sr)
+    
+    # Continue with existing processing
     if len(data) < length * sr:
         data = np.pad(data, (length * sr - len(data), 0))
     data = data[-(length * sr):]
-    mels = librosa.feature.melspectrogram(y=data, sr=sr, fmax=sr/2, n_mels=n_mels, hop_length=512, n_fft=2048) # (256, 94)
+    mels = librosa.feature.melspectrogram(y=data, sr=sr, fmax=sr//2, n_mels=n_mels, hop_length=512, n_fft=2048)
     mels = np.expand_dims(mels, axis=0)
     return torch.tensor([mels]).float()
 
 def create_spectrogram(audio_path):
     data, sr = librosa.load(audio_path)
+    
+    # Apply voice enhancement for visualization
+    # data = enhance_audio(data, sr)
+    
     plt.figure(figsize=(10, 4))
     spectrogram = librosa.feature.melspectrogram(y=data, sr=sr)
     librosa.display.specshow(librosa.power_to_db(spectrogram, ref=np.max), sr=sr)
     plt.colorbar(format='%+2.0f dB')
     plt.title('Mel-frequency spectrogram')
     
-    # Save plot to bytes
     fig = plt.gcf()
     plt.close()
     return fig
@@ -83,9 +140,18 @@ def predict(audio=None, use_random=False):
     else:
         # Save audio to temporary file
         temp_path = "_tmp.wav"
-        if os.path.exists(audio):
-            os.system(f"cp {audio} {temp_path}")
-            audio = temp_path
+        if audio is not None:
+            if isinstance(audio, dict):  # New Gradio audio format
+                audio_data = audio['array']
+                sr = audio['sr']
+                # Convert to mono if stereo
+                if len(audio_data.shape) > 1:
+                    audio_data = audio_data.mean(axis=1)
+                librosa.output.write_wav(temp_path, audio_data, sr)
+                audio = temp_path
+            elif os.path.exists(audio):
+                os.system(f"cp {audio} {temp_path}")
+                audio = temp_path
         else:
             return None, None, None
         processed_audio = process_audio(audio)

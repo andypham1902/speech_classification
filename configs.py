@@ -108,12 +108,12 @@ class ModelArguments:
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
-    resume_from_checkpoint: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "Pretrained config name or path if not the same as model_name"
-        },
-    )
+    # resume_from_checkpoint: Optional[str] = field(
+    #     default=None,
+    #     metadata={
+    #         "help": "Pretrained config name or path if not the same as model_name"
+    #     },
+    # )
 
 
 
@@ -125,6 +125,10 @@ class DataArguments:
     )
     train_data_file: str = field(
         default="data/train.csv",
+        metadata={"help": "The input training data file (a CSV file)."},
+    )
+    eval_data_file: str = field(
+        default="data/val.csv",
         metadata={"help": "The input training data file (a CSV file)."},
     )
     train_files: List[str] = field(

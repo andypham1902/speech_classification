@@ -64,6 +64,7 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     df = pd.read_csv(data_args.train_data_file)
+    df_val = pd.read_csv(data_args.eval_data_file)
     # Load datasets
     # train_dataset = QuestionDataset(
     #     df[df.fold != data_args.fold],
@@ -81,6 +82,7 @@ def main():
     train_dataset = EmotionDataset(
         df[df.fold != data_args.fold],
         mode="train",
+        sr=48000,
     )
     if data_args.max_samples > 0:
         train_dataset = train_dataset.select(
@@ -88,8 +90,10 @@ def main():
         )
 
     valid_dataset = EmotionDataset(
-        df[df.fold == data_args.fold],
+        # df[df.fold == data_args.fold],
+        df_val,
         mode="val",
+        sr=48000,
     )
     # Initialize trainer
     print("Initializing model...")
