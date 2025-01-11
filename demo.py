@@ -13,8 +13,8 @@ import librosa.display
 from scipy.signal import butter, filtfilt
 
 # Constants
-CHECKPOINT_PATH = "v2s_emo_augment_with_noise_2/checkpoint-1548/model.safetensors"
-TEST_DATA_PATH = "emotions.csv"
+CHECKPOINT_PATH = "v2s_emo_augment_with_noise_3/checkpoint-860/model.safetensors"
+TEST_DATA_PATH = "emotions_test.csv"
 EMOTION_LABELS = {
     0: 'Angry',
     1: 'Calm',
@@ -40,7 +40,8 @@ def load_model():
 def load_test_dataset():
     df = pd.read_csv(TEST_DATA_PATH)
     test_dataset = EmotionDataset(
-        df[df.fold == 0],  # Adjust fold as needed
+        # df[df.fold == 0],  # Adjust fold as needed
+        df,
         mode="val",
     )
     return test_dataset
@@ -104,7 +105,8 @@ def process_audio(audio_path):
     
     # Apply voice enhancement
     # data = enhance_audio(data, sr)
-    
+    # Normalize audio
+    data = data / (np.max(np.abs(data)) + 1e-6)
     # Continue with existing processing
     if len(data) < length * sr:
         data = np.pad(data, (length * sr - len(data), 0))

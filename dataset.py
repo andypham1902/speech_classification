@@ -15,10 +15,11 @@ def build_transforms(mode="train"):
         augment = Compose([
             TimeStretch(min_rate=0.95, max_rate=1.05, p=0.3),  # Reduced range and probability
             PitchShift(min_semitones=-1, max_semitones=1, p=0.3),  # Reduced range
-            Shift(p=0.5, shift_unit="seconds", min_shift=-0.3, max_shift=0.3, rollover=True),  # Reduced probability and range
+            Shift(p=0.5, shift_unit="seconds", min_shift=-0.2, max_shift=0.2, rollover=True),  # Reduced probability and range
             AddColorNoise(p=0.5),  # Reduced probability
             AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.2),  # Reduced max amplitude
-            BandPassFilter(min_center_freq=100.0, max_center_freq=8000.0, p=0.3),
+            # BandPassFilter(min_center_freq=100.0, max_center_freq=8000.0, p=0.3), # 48k
+            BandPassFilter(min_center_freq=50.0, max_center_freq=7000.0, p=0.3),  # For 16kHz audio
             # Normalize(p=1.0),  # Always normalize
         ])
     else:
@@ -105,8 +106,8 @@ class EmotionDataset(Dataset):
             if len(data) < self.length * self.sr:
                 data = np.pad(data, (self.length * self.sr - len(data), 0))
             data = data[-(self.length * self.sr):]
-        mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=512, n_fft=2048) # (256, 94)
-        # mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=256, n_fft=1024)
+        # mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=512, n_fft=2048) # (256, 94)
+        mels = librosa.feature.melspectrogram(y=data, sr=self.sr, fmax=self.sr/2, n_mels=self.n_mels, hop_length=256, n_fft=1024)
         mels = np.expand_dims(mels, axis=0)
         return torch.tensor(mels).float(), torch.tensor(label)
 
