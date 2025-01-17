@@ -13,7 +13,7 @@ import librosa.display
 from scipy.signal import butter, filtfilt
 
 # Constants
-CHECKPOINT_PATH = "v2s_emo_augment_with_noise_3/checkpoint-860/model.safetensors"
+CHECKPOINT_PATH = "v2s_attn_emo_neutral/checkpoint-1080/model.safetensors"
 TEST_DATA_PATH = "emotions_test.csv"
 EMOTION_LABELS = {
     0: 'Angry',
@@ -101,19 +101,18 @@ def process_audio(audio_path):
     sr = 48000
     length = 4
     n_mels = 128
+    data_max = 7.6293945e-06
+    data_min = -80.0
     data, sr = librosa.load(audio_path, sr=sr)
-    
-    # Apply voice enhancement
-    # data = enhance_audio(data, sr)
-    # Normalize audio
-    data = data / (np.max(np.abs(data)) + 1e-6)
     # Continue with existing processing
     if len(data) < length * sr:
         data = np.pad(data, (length * sr - len(data), 0))
     data = data[-(length * sr):]
-    mels = librosa.feature.melspectrogram(y=data, sr=sr, fmax=sr//2, n_mels=n_mels, hop_length=512, n_fft=2048)
-    mels = np.expand_dims(mels, axis=0)
-    return torch.tensor([mels]).float()
+    S = librosa.feature.melspectrogram(y=data, sr=sr, power=2.0)
+    S_dB = librosa.power_to_db(S, ref=np.max)
+    S_dB = (S_dB - data_min) / (data_max - data_min)
+    S_dB = np.expand_dims(np.expand_dims(S_dB, axis=0), axis=0)
+    return torch.tensor(S_dB).float()
 
 def create_spectrogram(audio_path):
     data, sr = librosa.load(audio_path)
@@ -150,13 +149,13 @@ def predict(audio=None, use_random=False):
                 if len(audio_data.shape) > 1:
                     audio_data = audio_data.mean(axis=1)
                 librosa.output.write_wav(temp_path, audio_data, sr)
-                audio = temp_path
-            elif os.path.exists(audio):
-                os.system(f"cp {audio} {temp_path}")
-                audio = temp_path
+                audio_path = temp_path
+            else:  # File upload case
+                audio_path = audio  # Use the original file path
         else:
             return None, None, None
-        processed_audio = process_audio(audio)
+
+        processed_audio = process_audio(audio_path)
         batch = {
             "images": processed_audio.cuda(),
         }
@@ -171,9 +170,10 @@ def predict(audio=None, use_random=False):
     results = {label: float(prob) for label, prob in zip(EMOTION_LABELS, probs)}
     
     # Generate spectrogram
-    spectrogram = create_spectrogram(audio)
+    spectrogram = create_spectrogram(audio if use_random else audio_path)
     
-    return results, audio, spectrogram
+    # Return the actual audio file path for playback
+    return results, (audio if use_random else audio_path), spectrogram
 
 # Gradio interface
 def create_interface():
