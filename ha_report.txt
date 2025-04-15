@@ -1,0 +1,9 @@
+filename, result
+0_0.mp3, {"Sad": 0.9}
+82_0.mp3, {"Sad": 0.65}
+6_0.mp3, {"Happy": 0.87}
+1_0.mp3, {"Neutral": 0.02}
+3_0.mp3, {"Neutral": 0.91}
+92_0.mp3, {"Sad": 0.88}
+9_0.mp3, {"Neutral": 0.32}
+13_0.mp3, {"Neutral": 0.95}
