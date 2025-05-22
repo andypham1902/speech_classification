@@ -80,9 +80,10 @@ def main():
     #     mode="val",
     # )
     train_dataset = EmotionDataset(
-        df[df.fold != data_args.fold],
+        df,
+        # df[df.fold != data_args.fold],
         mode="train",
-        sr=16000,
+        # sr=16000,
     )
     if data_args.max_samples > 0:
         train_dataset = train_dataset.select(
@@ -93,7 +94,7 @@ def main():
         # df[df.fold == data_args.fold],
         df_val,
         mode="val",
-        sr=16000,
+        # sr=16000,
     )
     # Initialize trainer
     print("Initializing model...")
